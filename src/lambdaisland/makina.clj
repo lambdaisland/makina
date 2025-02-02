@@ -3,77 +3,150 @@
    [clojure.walk :as walk]
    [lambdaisland.data-printers :as dp]))
 
-(defrecord Ref [id])
+(defrecord Ref [id]) ;; Reference a specific component by its id
+(defrecord Refset [t]) ;; Reference a set of components by type
+
 (defn ref? [o] (instance? Ref o))
+(defn refset? [o] (instance? Refset o))
 
 (dp/register-print Ref 'makina/ref :id)
 (dp/register-pprint Ref 'makina/ref :id)
+(dp/register-print Refset 'makina/refset :t)
+(dp/register-pprint Refset 'makina/refset :t)
 
-(defn find-refs [o]
+(defn find-by-pred
+  "Find all reference (`Ref` instances) in o"
+  [pred? o]
   (cond
-    (ref? o)
-    [(:id o)]
+    (pred? o)
+    [o]
     (map? o)
-    (find-refs (vals o))
+    (find-by-pred pred? (vals o))
     (coll? o)
-    (mapcat find-refs o)))
+    (mapcat (partial find-by-pred pred?) o)))
 
-(defn topo-sort-keys [sys]
+(defn entries-by-type [sys t]
+  (keep (fn [[k {:makina/keys [type] :as comp}]]
+          (when (isa? type t)
+            [k comp]))
+        sys))
+
+(def ids-by-type (comp (partial map first) entries-by-type))
+(def values-by-type (comp (partial map (comp :makina/value second)) entries-by-type))
+
+(defn expand-keys
+  "Add any dependent keys to the key sequence `ks`. The result is topoligically
+  sorted, so that if key `:a` has a reference to `:b`, then `:b` will occur in
+  the result before `:a`."
+  [sys ks]
   (let [recurse (fn recurse [acc k]
                   (let [v (get sys k)
-                        refs (find-refs v)]
-                    (reduce recurse (cons k (remove #{k} acc)) refs)))]
-    (loop [acc ()
-           sys sys]
-      (if (seq sys)
-        (let [k (key (first sys))
-              acc (recurse acc k)]
-          (recur acc (apply dissoc sys acc)))
+                        ref-ids (map :id (find-by-pred ref? (:makina/config v)))
+                        refset-ids (->> (:makina/config v)
+                                        (find-by-pred refset?)
+                                        (mapcat (comp (partial ids-by-type sys) :t)))]
+                    (reduce recurse (cons k (remove #{k} acc)) (distinct (concat ref-ids refset-ids)))))]
+    (loop [[k & ks] ks
+           acc ks]
+      (if k
+        (let [acc (recurse acc k)]
+          (recur ks acc))
         acc))))
 
-(defn signal-key [sys handlers src-state sig dest-state k]
+(defn replace-refs [sys v]
+  (walk/postwalk
+   (fn [o]
+     (cond
+       (ref? o)    (get-in sys [(:id o) :makina/value])
+       (refset? o) (values-by-type sys (:t o))
+       :else       o))
+   v))
+
+(defn find-handler
+  "Find a handler for a component of type `t` and a given signal. The map of
+  handlers is structured as `t -> sig -> fn`. For both the type `t` or the
+  signal `sig` the key `:default` is checked as a fallback.
+
+  For a given type (or for the `:default` type) instead of the `sig -> fn`
+  mapping a function may be supplied, which is equivalent to `{:start fn}`."
+  [handlers t sig]
+  (let [handlers (walk/prewalk #(if (var? %) @% %) handlers)]
+    (def hhh handlers)
+    (or (when (= :start sig)
+          (or (let [f (get handlers t)]
+                (when (fn? f) f))
+              (let [f (get handlers :default)]
+                (when (fn? f) f))))
+        (get-in handlers [t sig])
+        (get-in handlers [t :default])
+        (get-in handlers [:default sig])
+        (get-in handlers [:default :default])
+        identity)))
+
+(defn signal-key
+  "Signal a single key. Does not recurse, i.e. it is the callers responsibility
+  that dependent/dependee keys are signaled in topological (or reverse
+  topological) order. You likely don't want to use this directly, but if you
+  do [[expand-keys]] is your friend. See [[start]]/[[stop]] for higher level
+  functions.
+
+  Takes the system (should be expanded as per [[system]]), and a handlers lookup
+  map (see [[find-handler]]). Then transitions the component `k` to `dest-state`
+  by invoking the `sig` handler. No-op if `k` is already in the `dest-state`."
+  [sys handlers sig dest-state k]
   (if (= dest-state (get-in sys [k :makina/state]))
     sys
-    (let [c    (get sys k)
-          v    (:makina/value c)
-          refs (find-refs v)
-          sys  (reduce
-                (fn [sys k]
-                  (signal-key sys handlers src-state sig dest-state k))
-                sys
-                (remove (set (map key (filter (comp src-state val) sys))) refs))
-          v    (walk/postwalk
-                (fn [o]
-                  (if (ref? o)
-                    (get-in sys [(:id o) :makina/value])
-                    o))
-                v)]
-      (-> sys
-          (assoc-in [k :makina/state] dest-state)
-          (assoc-in [k :makina/value]
-                    (let [f (or (get-in handlers [(:makina/type c) sig])
-                                (get-in handlers [(:makina/type c) :default])
-                                (get-in handlers [:default sig])
-                                identity)
-                          v (f (if (map? v)
-                                 (assoc v :makina/signal sig)
-                                 v))]
-                      (if (map? v)
-                        (dissoc v :makina/signal)
-                        v)))))))
+    (let [c (get sys k)
+          v (replace-refs sys (:makina/value c))
+          f (find-handler handlers (:makina/type c) sig)
+          v (try
+              (f (if (map? v)
+                   (assoc v :makina/signal sig)
+                   v))
+              (catch Throwable t
+                [::error t]))]
+      (if (= ::error (when (vector? v) (first v)))
+        (reduced
+         (-> sys
+             (assoc-in [k :makina/state] :error)
+             (assoc-in [k :makina/error] (second v))))
+        (-> sys
+            (assoc-in [k :makina/state] dest-state)
+            (assoc-in [k :makina/value] (if (map? v)
+                                          (dissoc v :makina/signal)
+                                          v))
+            (dissoc :makina/error))))))
 
-(defn signal [sys handlers src-state sig dest-state]
+(defn signal-keyseq
+  "Signal a number of keys in order"
+  [sys handlers sig dest-state ks]
   (reduce (fn [sys k]
-            (signal-key sys handlers src-state sig dest-state k))
+            (signal-key sys handlers sig dest-state k))
           sys
-          (topo-sort-keys sys)))
+          ks))
 
-(defn system [config]
+(defn system
+  "Expand a config map (`id -> config`), to a system map (`id -> component`), with
+  all components stopped. In a system map each component is a map with keys
+
+  - `:makina/id` The unique identifier of this component
+  - `:makina/type` The type of this component, used to find handlers or expand
+     refsets, defaults to the `id`
+  - `:makina/state` The current state, defaults to `:stopped`
+  - `:makina/config` The initial configuration, verbatim. Refs are not yet expanded.
+  - `:makina/value` The current value for this component, initially this is the
+    initial config + :makina/id + :makine/type, and is then replaced/transformed
+    by signals like `:start`
+
+  Idempotent, will not expand keys that already look like components (have a `:makina/value`)
+  "
+  [config]
   (into {}
         (map (fn [[k v]]
                (if (:makina/value v)
                  [k v]
-                 [k {:makina/state :stopped
+                 [k {:makina/id k
+                     :makina/state :stopped
                      :makina/config v
                      :makina/value (if (map? v)
                                      (-> v
@@ -83,58 +156,76 @@
                      :makina/type (:makina/type v k)}])))
         config))
 
-(defn value [sys]
+(defn value
+  "System value, map of `:makina/id -> :makina/value`"
+  [sys]
   (update-vals sys :makina/value))
 
 (defn start
+  "Start the system, running the `start` handler for some/all keys/components, in
+  topological order."
   ([sys handlers]
-   (signal (system sys) handlers :stopped :start :started))
+   (start sys handlers (keys sys)))
   ([sys handlers ks]
-   (if (coll? ks)
-     (reduce #(start %1 handlers %2) sys ks)
-     (signal-key (system sys) handlers :stopped :start :started ks))))
+   (signal-keyseq (system sys) handlers :start :started (expand-keys sys ks))))
 
 (defn stop
+  "Stop the system, running the `stop` handler for some/all keys/components, in
+  reverse topological order."
   ([sys handlers]
-   (signal (system sys) handlers :started :stop :stopped))
+   (stop sys handlers (keys sys)))
   ([sys handlers ks]
-   (if (coll? ks)
-     (reduce #(start %1 handlers %2) sys ks)
-     (signal-key (system sys) handlers :started :stop :stopped ks))))
+   (update-vals
+    (signal-keyseq (system sys) handlers :stop :stopped (reverse (expand-keys sys ks)))
+    (fn [{:makina/keys [state config] :as comp}]
+      (if (= :stopped state)
+        (assoc comp :makina/value config)
+        comp)))))
 
-(def system-config
-  {:a {:makina/type :foo
-       :bar 123
-       :baz (->Ref :b)}
-   :b {:cfg :x}
-   :d (->Ref :e)
-   :c (->Ref :d)
-   :e 1})
+(require '[aero.core :as aero]
+         '[clojure.java.io :as io])
 
-(def handlers
-  {:foo {:start #(update % :bar inc)
-         :stop #(update % :bar dec)}
-   })
+(defn load! [r {:keys [data-readers]}]
+  (binding [*data-readers* (merge *data-readers*
+                                  data-readers
+                                  {'ref ->Ref
+                                   'refset ->Refset
+                                   'makina/ref ->Ref
+                                   'makina/refset ->Refset})]
+    (let [sys (system (aero.core/read-config (io/resource r)))]
+      (atom
+       {::system sys
+        ::handlers (into {}
+                         (comp
+                          (map val)
+                          (map :makina/type)
+                          (mapcat (fn [t]
+                                    (if (or (qualified-symbol? t)
+                                            (qualified-keyword? t))
+                                      (try
+                                        (let [comp (requiring-resolve (symbol t))]
+                                          [[t comp]])
+                                        (catch Exception _))))))
+                         sys)}))))
 
-(value (stop (start system-config handlers) handlers))
+(defn start!
+  ([!sys]
+   (start! !sys (keys (::system @!sys))))
+  ([!sys ks]
+   (let [v (swap! !sys
+                  (fn [{::keys [handlers] :as sys}]
+                    (update sys ::system start handlers ks)))]
+     (if-let [e (some (comp :makina/error val) (::system v))]
+       (throw e)
+       (value (::system v))))))
 
-;; (value
-;;  (->  (system system-config)
-;;       (signal
-;;        :stopped :start :started
-;;        )))
-
-
-;; ;; - start/stop individual keys
-;; ;; - error handling
-;; ;; - track component state
-
-;; ;; (signal-key system-config {} )
-
-;; ;; (system system-config)
-
-;; ;; (set! *print-namespace-maps* false)
-
-;; ;; (def states
-;; ;;   {:stopped {:start :started}
-;; ;;    :started {:stop :stopped}})
+(defn stop!
+  ([!sys]
+   (stop! !sys (keys (::system @!sys))))
+  ([!sys ks]
+   (let [v (swap! !sys
+                  (fn [{::keys [handlers] :as sys}]
+                    (update sys ::system stop handlers ks)))]
+     (if-let [e (some (comp :makina/error val) (::system v))]
+       (throw e)
+       (value (::system v))))))
