@@ -182,6 +182,10 @@
         (assoc comp :makina/value config)
         comp)))))
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Up to here it's all purely functional Clojure/ClojureScript. Below is the
+;; Clojure imperative shell part. Namespace organization is still TBD.
+
 (require '[aero.core :as aero]
          '[clojure.java.io :as io])
 

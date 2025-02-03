@@ -5,7 +5,7 @@
 
 (lioss/main
  {:license          :mpl
-  :inception-year   2024
+  :inception-year   2025
   :description      "System/component lifecycle management"
   :group-id         "com.lambdaisland"})
 
