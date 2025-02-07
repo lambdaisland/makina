@@ -1,0 +1,11 @@
+{:paths ["src" "resources"]
+ :deps  {
+         com.lambdaisland/makina     {:local/root ".."}
+         lambdaisland/data-printers  {:mvn/version "0.9.58"}
+         ;; com.lambdaisland/cli {:mvn/version "0.20.81"}
+         ;; com.lambdaisland/config {:mvn/version "0.5.22"}
+         com.lambdaisland/cli        {:local/root "../../cli"}
+         com.lambdaisland/config     {:local/root "../../config"}
+         lambdaisland/deep-diff2     {:mvn/version "2.12.219"}
+         org.clojure/tools.namespace {:mvn/version "1.5.0"}
+         }}

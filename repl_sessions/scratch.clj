@@ -1,4 +1,8 @@
-(ns scratch)
+(ns repl-sessions.scratch
+  (:require [lambdaisland.makina :as mak]))
+
+(class
+ #makina/ref :foo)
 
 
 (defn topo-sort-keys [sys]
