@@ -6,10 +6,13 @@
    [lambdaisland.makina.app :as app]))
 
 (def prefix "my_org_example")
-(def cli-opts (atom {}))
-(def config (config-cli/add-provider
-             (config/create {:prefix prefix})
-             cli-opts))
+
+(defonce cli-opts (atom {}))
+
+(defonce config
+  (config-cli/add-provider
+   (config/create {:prefix prefix})
+   cli-opts))
 
 (def get (partial config/get config))
 (def source (partial config/source config))
@@ -17,7 +20,7 @@
 (def entries (partial config/entries config))
 (def reload! (partial config/reload! config))
 
-(def system
+(defonce system
   (app/create
    {:prefix prefix
     :data-readers {'config get}}))
@@ -25,6 +28,9 @@
 (def load! (partial app/load! system))
 (def start! (partial app/start! system))
 (def stop! (partial app/stop! system))
+(def refresh (partial app/refresh `system))
+(def refresh-all (partial app/refresh-all `system))
 
-(get :http/port)
-(entries)
+(comment
+  (start!)
+  (refresh-all))

@@ -161,9 +161,12 @@
 (defn value
   "System value, map of `:makina/id -> :makina/value`"
   ([sys]
-   (update-vals sys :makina/value))
+   (update-vals sys :makina/value)))
+
+(defn component
+  "Single component value"
   ([sys id]
-   (get (value sys) id)))
+   (get-in sys [id :makina/value])))
 
 (defn start
   "Start the system, running the `start` handler for some/all keys/components, in

@@ -2,5 +2,5 @@
 
 (def component
   {:start (fn [config]
-            (println (str "Starting server at http://localhost:" (:port config)))
+            (println (str "[OK] Starting server at http://localhost:" (:port config)))
             (assoc config :started true))})
