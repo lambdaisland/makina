@@ -2,13 +2,14 @@
   "Purely functional API for starting/stopping systems of components.
 
   This is the Makina base layer, and is at your disposal when adapting it to
-  niche use cases. See the other namespaces for common use cases."
+  custom use cases. See the `app` namespace for more convenience."
+  {:clojure.tools.namespace.repl/load false} ; Don't redefine `Ref`/`Refset` or things break
   (:require
    [clojure.walk :as walk]
    [lambdaisland.data-printers.auto :as dp]))
 
-(defrecord Ref [id]) ;; Reference a specific component by its id
-(defrecord Refset [t]) ;; Reference a set of components by type
+(defrecord Ref [id])   ; Reference a specific component by its id
+(defrecord Refset [t]) ; Reference a set of components by type
 
 (defn ref? [o] (instance? Ref o))
 (defn refset? [o] (instance? Refset o))
@@ -73,7 +74,6 @@
   mapping a function may be supplied, which is equivalent to `{:start fn}`."
   [handlers t sig]
   (let [handlers (walk/prewalk #(if (var? %) @% %) handlers)]
-    (def hhh handlers)
     (or (when (= :start sig)
           (or (let [f (get handlers t)]
                 (when (fn? f) f))
@@ -103,7 +103,11 @@
           f (find-handler handlers (:makina/type c) sig)
           v (try
               (f (if (map? v)
-                   (assoc v :makina/signal sig)
+                   (assoc v
+                          :makina/signal sig
+                          :makina/id     (:makina/id c)
+                          :makina/type   (:makina/type c)
+                          :makina/state  (:makina/state c))
                    v))
               (catch Throwable t
                 [::error t]))]
@@ -167,6 +171,13 @@
   "Single component value"
   ([sys id]
    (get-in sys [id :makina/value])))
+
+(defn state
+  "System or component state"
+  ([sys]
+   (update-vals sys :makina/state))
+  ([sys id]
+   (get-in sys [id :makina/state])))
 
 (defn start
   "Start the system, running the `start` handler for some/all keys/components, in

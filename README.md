@@ -6,7 +6,100 @@
 
 System/component lifecycle management
 
-## Features
+## Overview
+
+Makina is a System Lifecycle Manager for Clojure. You define the components your
+application is made of, and the dependencies between them. And Makina takes care
+of starting and stopping them in the right order, and plugging them together.
+
+Makina has two APIs, `lambdaisland.makina.system` is the base API. It is
+unopionated and flexible, it implements the basic mechanisms for system
+lifecycle management.
+
+`lambdaisland.makina.app` is a
+[policy](https://lambdaisland.com/blog/2022-03-10-mechanism-vs-policy)
+namespace, it's opinionated, it assumes you follow specific conventions, and
+integrates with [tools.namespace](https://github.com/clojure/tools.namespace)
+for smart code reloading. It uses [Aero](https://github.com/juxt/aero) for
+loading config files.
+
+Makina plays well with
+[com.lambdaisland/config](https://github.com/lambdaisland/config)
+
+## Quickstart
+
+```clojure
+(ns my.app
+  (:refer-clojure :exclude [get])
+  (:require
+   [lambdaisland.config :as config]
+   [lambdaisland.makina.app :as app]))
+
+(def prefix "my-app")
+
+(defonce config (config/create {:prefix prefix}))
+
+(def get (partial config/get config))
+
+(defonce system
+  (app/create
+   {:prefix prefix
+    :data-readers {'config get}}))
+
+(def load! (partial app/load! system))
+(def start! (partial app/start! system))
+(def stop! (partial app/stop! system))
+(def refresh (partial app/refresh `system))
+(def refresh-all (partial app/refresh-all `system))
+
+(comment
+  system
+  (start!)
+  (stop!)
+  (refresh))
+```
+
+Then add a `resources/my-app/system.edn` (make sure `"resources"` is on the
+classpath).
+
+```clj
+{:my.app/first-component {:some "settings"}
+ :my.app/second-component {:dep #makina/ref :my.app/first-component}}
+```
+
+And define handlers for your components. You have two options for this. For
+instance, for `:my.app/first-component` , you either define a var named
+`#'my.app/first-component`, or `#'my.app.first-component/component`
+
+```clj
+(ns my.app.first-component)
+
+(def component 
+ {:start (fn [opts] ,,,)
+  :stop  (fn [v] ,,,)}
+```
+
+The `start` function receives configuration for that component from `system.edn`, plus some additional keys map
+
+```clojure
+{:makina/id :my.app/first-component
+ :makina/type :my.app/first-component
+ :makina/state :stopped
+ :makina/signal :start}
+```
+
+`:stop` receives the value returned from `:start`. If it's a map, then
+`:makina/id`, `:makina/type`, `:makina/state`, and `:makina/signal` are added to
+the map before calling `:stop`.
+
+These additional keys allow you to write more generic handlers that can deal
+with multiple types of components.
+
+## Further reading
+
+- [Blog post with rationale](https://arnebrasseur.net/2025-02-06-open-source-diary.html)
+- [Follow-up blog post](https://arnebrasseur.net/2024-02-09-open-source-diary.html)
+- [Tea garden: Reloadable Component System](https://gaiwan.co/wiki/ReloadableComponentSystem.md)
 
 <!-- installation -->
 ## Installation

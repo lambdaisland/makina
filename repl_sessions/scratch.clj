@@ -1,5 +1,9 @@
 (ns repl-sessions.scratch
-  (:require [lambdaisland.makina :as mak]))
+  (:require [lambdaisland.makina.system :as sys]))
+
+(sys/system
+ {:my.app/db {:jdbc-url "..."}
+  :my.app/http-server {:db #makina/ref :my.app/db}})
 
 (class
  #makina/ref :foo)

@@ -1,3 +1,3 @@
 {:deps {lambdaisland/open-source {:git/url "https://github.com/lambdaisland/open-source"
-                                  :git/sha "6cb675d2adae284021f8cd94dcfbd078986b39bd"}
-        com.lambdaisland/launchpad {:mvn/version "0.36.159-alpha"}}}
+                                  :git/sha "52d82093bde661cd8c57b2f1e8cfaf854575a583"}
+        com.lambdaisland/launchpad {:mvn/version "0.43.186-alpha"}}}

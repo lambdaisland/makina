@@ -7,7 +7,7 @@
   ([]
    ((jit my-org.example.config/start!)))
   ([& ks]
-   ((jit my-org.example.config/start!) ks)))
+   (apply (jit my-org.example.config/start!) ks)))
 
 (defn stop! []
   ((jit my-org.example.config/stop!)))
