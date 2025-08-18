@@ -4,12 +4,13 @@
   (:require
    [lambdaisland.makina.system :as sys]
    [aero.core :as aero]
-   [clojure.java.io :as io]))
+   [clojure.java.io :as io]
+   [clojure.pprint :as pprint]))
 
 (defn try-resolve [sym]
   (try
     (requiring-resolve sym)
-    (catch Exception _)))
+    (catch java.io.FileNotFoundException _)))
 
 (defn create [{:keys [prefix ns-prefix config-source data-readers handlers]}]
   (atom (cond-> {:makina/state :not-loaded
@@ -35,39 +36,51 @@
      n)
     s)))
 
+(defn load-handlers
+  [system ns-prefix extra-handlers]
+  (merge
+   (into {:default {:stop identity}}
+         (comp
+          (remove (comp (set (keys extra-handlers)) :makina/type val))
+          (map val)
+          (map :makina/type)
+          (mapcat (fn [t]
+                    (cond
+                      (or (qualified-symbol? t)
+                          (qualified-keyword? t))
+                      (when-let [comp (or (try-resolve (prefix-ns ns-prefix t))
+                                          (try-resolve (prefix-ns ns-prefix
+                                                                  (str (namespace t) "." (name t))
+                                                                  "component")))]
+                        [[t comp]])
+
+                      (or (simple-symbol? t)
+                          (simple-keyword? t))
+                      (when-let [comp (try-resolve  (prefix-ns ns-prefix (name t) "component"))]
+                        [[t comp]]))))
+          (remove (comp nil? second)))
+         system)
+   extra-handlers))
+
 (defn load* [{:makina/keys [state config-source
                             data-readers extra-handlers
                             ns-prefix] :as app}]
   (if-let [sys-edn (io/resource config-source)]
     (binding [*data-readers* (merge *data-readers* data-readers)]
-      (let [system   (sys/system (aero.core/read-config sys-edn))
-            handlers (merge
-                      (into {}
-                            (comp
-                             (remove (comp (set (keys extra-handlers)) :makina/type val))
-                             (map val)
-                             (map :makina/type)
-                             (mapcat (fn [t]
-                                       (cond
-                                         (or (qualified-symbol? t)
-                                             (qualified-keyword? t))
-                                         (when-let [comp (or (try-resolve (prefix-ns ns-prefix t))
-                                                             (try-resolve (prefix-ns ns-prefix
-                                                                                     (str (namespace t) "." (name t))
-                                                                                     "component")))]
-                                           [[t comp]])
-
-                                         (or (simple-symbol? t)
-                                             (simple-keyword? t))
-                                         (when-let [comp (try-resolve  (prefix-ns ns-prefix (name t) "component"))]
-                                           [[t comp]]))))
-                             (remove (comp nil? second)))
-                            system)
-                      extra-handlers)]
-        (assoc app
-               :makina/state :loaded
-               :makina/system system
-               :makina/handlers handlers)))
+      (let [system (sys/system (aero.core/read-config sys-edn))]
+        (try
+          (let [handlers (load-handlers system ns-prefix extra-handlers)]
+            (assoc app
+                   :makina/state :loaded
+                   :makina/system system
+                   :makina/handlers handlers))
+          (catch Exception e
+            (throw (ex-info "Failed to load handlers"
+                            (assoc app
+                                   :makina/state :load-error
+                                   :makina/error e
+                                   :makina/system system)
+                            e))))))
     (throw (IllegalArgumentException. (str "System EDN file " config-source " not found on classpath.")))))
 
 (defn load! [app]
@@ -79,9 +92,12 @@
   ([!app ks]
    (let [v (swap! !app
                   (fn [{:makina/keys [state] :as app}]
-                    (let [{:makina/keys [handlers system] :as app} (if (= :loaded state) app (load* app))
-                          ks (if (seq ks) ks (keys system))]
-                      (update app :makina/system sys/start handlers ks))))]
+                    (let [{:makina/keys [handlers system] :as app} (if (= :not-loaded state) (load* app) app)
+                          ks (if (seq ks) ks (keys system))
+                          started-app (update app :makina/system sys/start handlers ks)]
+                      (assoc started-app :makina/state (if (sys/error (:makina/system started-app))
+                                                         :error
+                                                         :started)))))]
      (if-let [{:makina/keys [id type config error]} (some #(when (:makina/error (val %))
                                                              (val %))
                                                           (:makina/system v))]
@@ -123,6 +139,14 @@
   ([!app id]
    (-> @!app :makina/system (sys/state id))))
 
+(defn error
+  "If a component is in the error state, return the Error.
+
+  Generally there is never more than one, since system startup stops when an
+  error is encountered."
+  [!app]
+  (-> @!app :makina/system sys/error))
+
 (defn prep-refresh [app-var-sym]
   (let [ns-name (gensym "lambdaisland.makine.temp")
         ns (create-ns ns-name)
@@ -143,15 +167,22 @@
   [app-var-sym]
   ((requiring-resolve 'clojure.tools.namespace.repl/refresh-all) :after (prep-refresh app-var-sym)))
 
-;; ;; this
-;; {:http/server {:makina/config {:port 8080}
-;;                :makina/value #<jetty instance>}}
+(defn print-table
+  "Show a table with the components in the system with their state, in the order
+  they were started."
+  [!app]
+  (let [app @!app
+        components (vals (:makina/system app))]
+    (print "  System state =" (:makina/state app))
+    (->> (concat
+          (->> (remove (comp #{:stopped} :makina/state) components)
+               (sort-by :makina/timestamp))
+          (filter (comp #{:stopped} :makina/state) components))
+         (map #(select-keys % [:makina/id :makina/state]))
+         pprint/print-table)
 
-;; ;; vs this
-;; {:makina/components
-;;  {:http/server {:makina/config {:port 8080}
-;;                 :makina/value #<jetty instance>}}
-
-;;  :makina/handlers
-;;  {:http/server {:start jetty/run-jetty
-;;                 :stop #(.stop %)}}}
+    (when-let [e (error !app)]
+      (println "  Error in" (str (some #(when (:makina/error %) (:makina/id %)) components) ":") (.getClass e))
+      (println "  Message:" (.getMessage e))
+      (when-let [ed (ex-data e)]
+        (println "  ex-data:" (pr-str ed))))))

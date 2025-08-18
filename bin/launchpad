@@ -2,7 +2,7 @@
 
 (require '[lambdaisland.launchpad :as launchpad])
 
-(launchpad/main {:java-args ["-Dclojure.main.report=stderr"]})
+(launchpad/main {:java-args []})
 
 ;; Local Variables:
 ;; mode:clojure

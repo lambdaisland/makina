@@ -37,24 +37,63 @@
 (def ids-by-type (comp (partial map first) entries-by-type))
 (def values-by-type (comp (partial map (comp :makina/value second)) entries-by-type))
 
-(defn expand-keys
-  "Add any dependent keys to the key sequence `ks`. The result is topoligically
-  sorted, so that if key `:a` has a reference to `:b`, then `:b` will occur in
-  the result before `:a`."
-  [sys ks]
-  (let [recurse (fn recurse [acc k]
-                  (let [v (get sys k)
-                        ref-ids (map :id (find-by-pred ref? (:makina/config v)))
-                        refset-ids (->> (:makina/config v)
-                                        (find-by-pred refset?)
-                                        (mapcat (comp (partial ids-by-type sys) :t)))]
-                    (reduce recurse (cons k (remove #{k} acc)) (distinct (concat ref-ids refset-ids)))))]
-    (loop [[k & ks] ks
-           acc ks]
-      (if k
-        (let [acc (recurse acc k)]
-          (recur ks acc))
-        acc))))
+(defn comp-dependencies
+  "Ids of all components this component depends on"
+  [sys c]
+  (let [ref-ids (map :id (find-by-pred ref? (:makina/config c)))
+        refset-ids (->> (:makina/config c)
+                        (find-by-pred refset?)
+                        (mapcat (comp (partial ids-by-type sys) :t)))]
+    (set (concat ref-ids refset-ids))))
+
+(defn sys-graph->
+  "Graph of forward dependencies in the system: `{dependent-id #{dependee-id}}`"
+  [sys]
+  (into {} (map (juxt key #(comp-dependencies sys (val %)))) sys))
+
+(defn sys-graph<-
+  "Graph of backward dependencies in the system: `{dependee-id #{dependent-id}}`"
+  [sys]
+  (let [g (sys-graph-> sys)]
+    (reduce (fn [acc k]
+              (assoc acc k (into #{}
+                                 (keep #(when (contains? (val %) k)
+                                          (key %)))
+                                 g)))
+            {}
+            (keys sys))))
+
+(defn subgraph [g ks]
+  (loop [q (into clojure.lang.PersistentQueue/EMPTY ks)
+         g' {}]
+    (let [k (peek q)
+          q (pop q)]
+      (if-not k
+        g'
+        (let [ids (get g k)]
+          (recur
+           (into q (remove #(contains? g' %) ids))
+           (assoc g' k ids)))))))
+
+(defn kahn-topo-sort
+  [g]
+  (let [no-incoming (remove (apply some-fn (vals g)) (keys g))]
+    (loop [g g
+           l '()
+           q (into clojure.lang.PersistentList/EMPTY no-incoming)]
+      (let [k (peek q)]
+        (if-not k
+          (if (empty? g)
+            l
+            (throw (ex-info "Cycle detected" {:graph g :key k})))
+          (let [q (pop q)
+                ids (get g k)
+                g (dissoc g k)]
+            (recur g
+                   (conj l k)
+                   (if (seq g)
+                     (into q (remove (apply some-fn (vals g))) ids)
+                     (into q ids)))))))))
 
 (defn replace-refs [sys v]
   (walk/postwalk
@@ -73,17 +112,21 @@
   For a given type (or for the `:default` type) instead of the `sig -> fn`
   mapping a function may be supplied, which is equivalent to `{:start fn}`."
   [handlers t sig]
-  (let [handlers (walk/prewalk #(if (var? %) @% %) handlers)]
-    (or (when (= :start sig)
-          (or (let [f (get handlers t)]
-                (when (fn? f) f))
-              (let [f (get handlers :default)]
-                (when (fn? f) f))))
-        (get-in handlers [t sig])
-        (get-in handlers [t :default])
-        (get-in handlers [:default sig])
-        (get-in handlers [:default :default])
-        identity)))
+  (let [handlers (walk/prewalk #(if (var? %) @% %) handlers)
+        handler (or (when (= :start sig)
+                      (or (let [f (get handlers t)]
+                            (when (fn? f) f))
+                          (let [f (get handlers :default)]
+                            (when (fn? f) f))))
+                    (get-in handlers [t sig])
+                    (get-in handlers [t :default])
+                    (get-in handlers [:default sig])
+                    (get-in handlers [:default :default]))]
+    (when-not handler
+      (throw (ex-info (str "No handler found for " [t sig])
+                      {:makina/type t
+                       :makina/signal sig})))
+    handler))
 
 (defn signal-key
   "Signal a single key. Does not recurse, i.e. it is the callers responsibility
@@ -114,14 +157,16 @@
       (if (= ::error (when (vector? v) (first v)))
         (reduced
          (-> sys
+             (assoc-in [k :makina/timestamp] (java.time.Instant/now))
              (assoc-in [k :makina/state] :error)
              (assoc-in [k :makina/error] (second v))))
         (-> sys
+            (assoc-in [k :makina/timestamp] (java.time.Instant/now))
             (assoc-in [k :makina/state] dest-state)
             (assoc-in [k :makina/value] (if (map? v)
                                           (dissoc v :makina/signal)
                                           v))
-            (dissoc :makina/error))))))
+            (update k dissoc :makina/error))))))
 
 (defn signal-keyseq
   "Signal a number of keys in order"
@@ -179,13 +224,21 @@
   ([sys id]
    (get-in sys [id :makina/state])))
 
+(defn error
+  "If a component is in the error state, return the Error.
+
+  Generally there is never more than one, since system startup stops when an
+  error is encountered."
+  [sys]
+  (some :makina/error (vals sys)))
+
 (defn start
   "Start the system, running the `start` handler for some/all keys/components, in
   topological order."
   ([sys handlers]
-   (start sys handlers (keys sys)))
+   (signal-keyseq (system sys) handlers :start :started (kahn-topo-sort (sys-graph-> sys))))
   ([sys handlers ks]
-   (signal-keyseq (system sys) handlers :start :started (expand-keys sys ks))))
+   (signal-keyseq (system sys) handlers :start :started (kahn-topo-sort (subgraph (sys-graph-> sys) ks)))))
 
 (defn stop
   "Stop the system, running the `stop` handler for some/all keys/components, in
@@ -194,7 +247,7 @@
    (stop sys handlers (keys sys)))
   ([sys handlers ks]
    (update-vals
-    (signal-keyseq (system sys) handlers :stop :stopped (reverse (expand-keys sys ks)))
+    (signal-keyseq (system sys) handlers :stop :stopped (kahn-topo-sort (subgraph (sys-graph<- sys) ks)))
     (fn [{:makina/keys [state config] :as comp}]
       (if (= :stopped state)
         (assoc comp :makina/value config)
