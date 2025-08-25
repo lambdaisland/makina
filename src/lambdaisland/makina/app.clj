@@ -42,8 +42,9 @@
    (into {:default {:stop identity}}
          (comp
           (remove (comp (set (keys extra-handlers)) :makina/type val))
+          (remove (comp (set (keys extra-handlers)) :makina/id val))
           (map val)
-          (map :makina/type)
+          (mapcat (juxt :makina/type :makina/id))
           (mapcat (fn [t]
                     (cond
                       (or (qualified-symbol? t)
@@ -148,7 +149,7 @@
   (-> @!app :makina/system sys/error))
 
 (defn prep-refresh [app-var-sym]
-  (let [ns-name (gensym "lambdaisland.makine.temp")
+  (let [ns-name (gensym "lambdaisland.makina.temp")
         ns (create-ns ns-name)
         !app @(resolve app-var-sym)]
     ((requiring-resolve 'clojure.tools.namespace.repl/disable-reload!) ns)
@@ -161,11 +162,29 @@
 
 (defn refresh
   [app-var-sym]
-  ((requiring-resolve 'clojure.tools.namespace.repl/refresh) :after (prep-refresh app-var-sym)))
+  ;; java.lang.IllegalStateException: Can't change/establish root binding of: *ns* with set
+  ;; [clojure.tools.namespace.repl$refresh_scanned invokeStatic "repl.clj" 136]
+  (binding [*ns* (the-ns 'user)]
+    ((requiring-resolve 'clojure.tools.namespace.repl/refresh) :after (prep-refresh app-var-sym))))
 
 (defn refresh-all
   [app-var-sym]
-  ((requiring-resolve 'clojure.tools.namespace.repl/refresh-all) :after (prep-refresh app-var-sym)))
+  ;; java.lang.IllegalStateException: Can't change/establish root binding of: *ns* with set
+  ;; [clojure.tools.namespace.repl$refresh_scanned invokeStatic "repl.clj" 136]
+  (binding [*ns* (the-ns 'user)]
+    ((requiring-resolve 'clojure.tools.namespace.repl/refresh-all) :after (prep-refresh app-var-sym))))
+
+(defn restart! [!app ks]
+  (let [{:makina/keys [system state]} @!app
+        ks (if (seq ks) ks (keys system))]
+    (if (= :started state)
+      (let [started-ks (->> (:makina/system @!app)
+                            vals
+                            (filter (comp #{:started} :makina/state))
+                            (map :makina/id))]
+        (stop! !app ks)
+        (start! !app started-ks))
+      (start! !app ks))))
 
 (defn print-table
   "Show a table with the components in the system with their state, in the order

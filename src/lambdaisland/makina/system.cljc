@@ -75,9 +75,14 @@
            (into q (remove #(contains? g' %) ids))
            (assoc g' k ids)))))))
 
+(defn no-incoming-edges [g ids]
+  (if-let [vs (seq (vals g))]
+    (remove (apply some-fn vs) ids)
+    ids))
+
 (defn kahn-topo-sort
   [g]
-  (let [no-incoming (remove (apply some-fn (vals g)) (keys g))]
+  (let [no-incoming (no-incoming-edges g (keys g))]
     (loop [g g
            l '()
            q (into clojure.lang.PersistentList/EMPTY no-incoming)]
@@ -91,9 +96,7 @@
                 g (dissoc g k)]
             (recur g
                    (conj l k)
-                   (if (seq g)
-                     (into q (remove (apply some-fn (vals g))) ids)
-                     (into q ids)))))))))
+                   (into q (no-incoming-edges g ids)))))))))
 
 (defn replace-refs [sys v]
   (walk/postwalk
@@ -105,23 +108,40 @@
    v))
 
 (defn find-handler
-  "Find a handler for a component of type `t` and a given signal. The map of
-  handlers is structured as `t -> sig -> fn`. For both the type `t` or the
-  signal `sig` the key `:default` is checked as a fallback.
+  "Find a handler for a component of type `t` and id `id` and a given signal. The
+  map of handlers is structured as `t -> sig -> fn`. For both the type `t` or
+  the signal `sig` the key `:default` is checked as a fallback.
 
   For a given type (or for the `:default` type) instead of the `sig -> fn`
-  mapping a function may be supplied, which is equivalent to `{:start fn}`."
-  [handlers t sig]
+  mapping a function may be supplied, which is equivalent to `{:start fn}`.
+
+  This first searches for a matching handler based on the type, then on the id,
+  and then for type `:default`.
+  "
+  [handlers t id sig]
   (let [handlers (walk/prewalk #(if (var? %) @% %) handlers)
-        handler (or (when (= :start sig)
-                      (or (let [f (get handlers t)]
-                            (when (fn? f) f))
-                          (let [f (get handlers :default)]
-                            (when (fn? f) f))))
-                    (get-in handlers [t sig])
-                    (get-in handlers [t :default])
-                    (get-in handlers [:default sig])
-                    (get-in handlers [:default :default]))]
+        start?  (= :start sig)
+        handler (or
+                 ;; look for type
+                 (when start?
+                   (let [f (get handlers t)]
+                     (when (fn? f) f)))
+                 (get-in handlers [t sig])
+                 (get-in handlers [t :default])
+                 ;; look for id
+                 (when (not= t id)
+                   (or
+                    (when start?
+                      (let [f (get handlers id)]
+                        (when (fn? f) f)))
+                    (get-in handlers [id sig])
+                    (get-in handlers [id :default])   ))
+                 ;; look for default
+                 (when start?
+                   (let [f (get handlers :default)]
+                     (when (fn? f) f)))
+                 (get-in handlers [:default sig])
+                 (get-in handlers [:default :default]))]
     (when-not handler
       (throw (ex-info (str "No handler found for " [t sig])
                       {:makina/type t
@@ -143,7 +163,7 @@
     sys
     (let [c (get sys k)
           v (replace-refs sys (:makina/value c))
-          f (find-handler handlers (:makina/type c) sig)
+          f (find-handler handlers (:makina/type c) (:makina/id c) sig)
           v (try
               (f (if (map? v)
                    (assoc v
@@ -246,9 +266,12 @@
   ([sys handlers]
    (stop sys handlers (keys sys)))
   ([sys handlers ks]
-   (update-vals
-    (signal-keyseq (system sys) handlers :stop :stopped (kahn-topo-sort (subgraph (sys-graph<- sys) ks)))
-    (fn [{:makina/keys [state config] :as comp}]
-      (if (= :stopped state)
-        (assoc comp :makina/value config)
-        comp)))))
+   (let [ks (filter (comp #{:started} (partial state sys)) ks)]
+     (if-not (seq ks)
+       sys
+       (update-vals
+        (signal-keyseq (system sys) handlers :stop :stopped (kahn-topo-sort (subgraph (sys-graph<- sys) ks)))
+        (fn [{:makina/keys [state config] :as comp}]
+          (if (= :stopped state)
+            (assoc comp :makina/value config)
+            comp)))))))
