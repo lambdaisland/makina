@@ -107,13 +107,13 @@ with multiple types of components.
 To use the latest release, add the following to your `deps.edn` ([Clojure CLI](https://clojure.org/guides/deps_and_cli))
 
 ```
-com.lambdaisland/makina {:mvn/version "0.1.8"}
+com.lambdaisland/makina {:mvn/version "0.2.12"}
 ```
 
 or add the following to your `project.clj` ([Leiningen](https://leiningen.org/))
 
 ```
-[com.lambdaisland/makina "0.1.8"]
+[com.lambdaisland/makina "0.2.12"]
 ```
 <!-- /installation -->
 
