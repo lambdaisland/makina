@@ -57,7 +57,7 @@
 
                       (or (simple-symbol? t)
                           (simple-keyword? t))
-                      (when-let [comp (try-resolve  (prefix-ns ns-prefix (name t) "component"))]
+                      (when-let [comp (try-resolve (prefix-ns ns-prefix (name t) "component"))]
                         [[t comp]]))))
           (remove (comp nil? second)))
          system)
@@ -148,13 +148,20 @@
   [!app]
   (-> @!app :makina/system sys/error))
 
+(defn started-keys [app]
+  (->> (:makina/system app)
+       vals
+       (filter (comp #{:started} :makina/state))
+       (map :makina/id)))
+
 (defn prep-refresh [app-var-sym]
   (let [ns-name (gensym "lambdaisland.makina.temp")
         ns (create-ns ns-name)
-        !app @(resolve app-var-sym)]
+        !app @(resolve app-var-sym)
+        ks (started-keys @!app)]
     ((requiring-resolve 'clojure.tools.namespace.repl/disable-reload!) ns)
     (intern ns 'after-load (fn after-load []
-                             ((requiring-resolve `start!) @(requiring-resolve app-var-sym))
+                             ((requiring-resolve `start!) @(requiring-resolve app-var-sym) ks)
                              (remove-ns ns-name)))
     (stop! !app)
     (swap! !app assoc :makina/state :not-loaded :makina/system nil)
@@ -178,10 +185,7 @@
   (let [{:makina/keys [system state]} @!app
         ks (if (seq ks) ks (keys system))]
     (if (= :started state)
-      (let [started-ks (->> (:makina/system @!app)
-                            vals
-                            (filter (comp #{:started} :makina/state))
-                            (map :makina/id))]
+      (let [started-ks (started-keys @!app)]
         (stop! !app ks)
         (start! !app started-ks))
       (start! !app ks))))
