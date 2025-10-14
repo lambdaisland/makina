@@ -121,6 +121,34 @@ or add the following to your `project.clj` ([Leiningen](https://leiningen.org/))
 
 ## Usage
 
+### How to organize the component source? ns-prefix
+
+Typically, we write our `resources/${app-name-as-prefix}/system.edn` like
+
+```
+{:category/first-comp {:some "settings ..."}
+ :category/second-comp {:some "settings ..."}}
+```
+
+A typical `category/first-comp` may be `system/http`.
+
+and then, we want to organize our component source in a way like
+
+```
+src/org/my_org/my_app/category/first_comp.clj
+```
+
+In above case, we need to let **makina** know the namespace as `"org.my_org.my_app"` 
+
+We can tell makina by passing `ns-prefix`:
+
+```
+(app/create
+   {:prefix ${app-name-as-prefix}
+    :ns-prefix "org.my_org.my_app"
+    :data-readers {'config get}})
+```
+
 <!-- opencollective -->
 ## Lambda Island Open Source
 
