@@ -47,7 +47,11 @@ or add the following to your `project.clj` ([Leiningen](https://leiningen.org/))
 
 ## Quickstart
 
-This shows the pattern of using Makina with lambdaisland/config.
+This shows the pattern of using Makina with
+[lambdaisland/config](https://github.com/lambdaisland/config). This is just a
+concise example for people who already have a rough sense of what to expect, and
+just want to see some particulars.. If this section doesn't make much sense to
+you, then scroll down to "[Deep Dive](#deep-dive)", and start reading from there.
 
 ```clj
 (ns my.app
