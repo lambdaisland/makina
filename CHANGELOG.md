@@ -3,6 +3,7 @@
 ## Added
 
 - Add `lambdaisland.makina.test`
+- Add Kaocha plugin
 - Add a full write-up to the README
 
 ## Changed

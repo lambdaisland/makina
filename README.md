@@ -532,34 +532,48 @@ for components your test code might want to reference directly. Then in each
 test namespace, you declare which components are needed (as a vector/set, or
 with `{:keys ,,,}`), and if necessary additional overrides.
 
-This does mean that for each test namespace your system gets started and
-stopped. Depending on your start/stop logic, this can take anything from
-milliseconds to minutes. If you have a fairly heavy system, you may prefer to
-start/stop it only once for the entire test run. In that case, you can use
-[Kaocha](https://github.com/lambdaisland/kaocha)'s Hooks plugin with the
-`lambdaisland.makina.test/wrap-run` function.
-
-```clj
-;; tests.edn
-#kaocha/v1
-{:plugins [:hooks]
- :kaocha.hooks/wrap-run [lambdaisland.makina.test/wrap-run]
- :makina/settings {:prefix "my-app"}
- ;; OR
- :makina/settings my-app.config.makina-opts}
-```
-
-Now the system will be started and stopped once, and bound to `*app*` for the
-duration of the test run. The settings in this case can be set directly in
-tests.edn, or you can provide the name of a var that contains either the
-settings map, or a function that returns the settings map.
-
 While working on tests, you will likely want to evaluate bits of test code from
 the REPL or your editor. If these reference `*app*` then that's a problem, since
 `*app*` is only bound during actual test runs (when using the fixture or hooks
 approach). For this scenario there is `lambdaisland.makina.test/start!`. This
 takes a similar settings map as `with-app` or `make-fixture-fn`, but permantly
 binds `*app*`.
+
+The fixture approach does mean that for each test namespace your system gets
+started and stopped again and again. Depending on your start/stop logic, and how
+many heavier components you are mocking out with handler overrides, this can
+take anything from milliseconds to minutes. If you have a fairly heavy system,
+you may prefer to start/stop it only once for the entire test run. In that case,
+you can use the [Kaocha](https://github.com/lambdaisland/kaocha) plugin provided
+with Makina.
+
+### Kaocha plugin
+
+Makina ships with a plugin for [Kaocha](https://github.com/lambdaisland/kaocha),
+this further builds upon `lambdaisland.makina.test`, ensuring that while tests
+are running they can find a started app value in
+`lambdaisland.makina.test/*app*`. The benefit of using this over the fixture
+approach is that the system is only initialized once, potentially significantly
+speeding up your test run.
+
+With Makina listed as dependency in `deps.edn` (or equivalent), add the plugin
+to your Kaocha setup (`tests.edn`). Then configure `:makina/settings`, either at
+the top level of `tests.edn`, or on a specific test suite.
+
+```clj
+;; tests.edn
+#kaocha/v1
+{:plugins [:lambdaisland.makina/kaocha-plugin]
+ :makina/settings {:prefix "my-app"}
+ ;; OR on the test suite level
+ :tests [{:id :unit
+          :makina/settings my-app.config.makina-opts}])
+```
+
+Now the system will be started and stopped once, and bound to `*app*` for the
+duration of the test run. The settings in this case can be set directly in
+`tests.edn` as a map literal, or you can provide the name of a var that contains
+either the settings map, or a function that returns the settings map.
 
 ### Making use the Aero profile
 

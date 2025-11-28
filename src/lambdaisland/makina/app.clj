@@ -219,13 +219,18 @@
   ([!app id]
    (-> @!app :makina/system (sys/state id))))
 
+(defn error*
+  "Functional version of [[error]]"
+  [app]
+  (-> app :makina/system sys/error))
+
 (defn error
   "If a component is in the error state, return the Error.
 
   Generally there is never more than one, since system startup stops when an
   error is encountered."
   [!app]
-  (-> @!app :makina/system sys/error))
+  (error* @!app))
 
 (defn started-keys
   "Sequence of keys of components that are in the `:started` state"
