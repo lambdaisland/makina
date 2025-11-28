@@ -2,9 +2,15 @@
 
 ## Added
 
-## Fixed
+- Add `lambdaisland.makina.test`
+- Add a full write-up to the README
 
 ## Changed
+
+- `:config-source` is now just `:config`, and can receive a map, function, var,
+  resource (URL), file (java.io.File), or relative resource path (string)
+- in the `app` layer, separate atom operations from their purely functional
+  logic, so either version can be called directly
 
 # 0.3.16 (2025-09-01 / 4691756)
 
