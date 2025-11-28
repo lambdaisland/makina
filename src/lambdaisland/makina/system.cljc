@@ -6,7 +6,7 @@
   {:clojure.tools.namespace.repl/load false} ; Don't redefine `Ref`/`Refset` or things break
   (:require
    [clojure.walk :as walk]
-   [lambdaisland.data-printers.auto :as dp]))
+   #?(:clj [lambdaisland.data-printers.auto :as dp])))
 
 (defrecord Ref [id])   ; Reference a specific component by its id
 (defrecord Refset [t]) ; Reference a set of components by type
@@ -14,8 +14,8 @@
 (defn ref? [o] (instance? Ref o))
 (defn refset? [o] (instance? Refset o))
 
-(dp/register-printer Ref 'makina/ref :id)
-(dp/register-printer Refset 'makina/refset :t)
+#?(:clj (dp/register-printer Ref 'makina/ref :id))
+#?(:clj (dp/register-printer Refset 'makina/refset :t))
 
 (defn find-by-pred
   "Find all reference (`Ref` instances) in o"
@@ -85,7 +85,7 @@
   (let [no-incoming (no-incoming-edges g (keys g))]
     (loop [g g
            l '()
-           q (into clojure.lang.PersistentList/EMPTY no-incoming)]
+           q (into '() no-incoming)]
       (let [k (peek q)]
         (if-not k
           (if (empty? g)

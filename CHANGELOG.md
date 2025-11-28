@@ -2,23 +2,14 @@
 
 ## Added
 
-## Fixed
-
-## Changed
-
-# 0.6.29 (2025-11-28 / b8dddb3)
-
-## Fixed
-
-- Fix cljdoc build
-
-# 0.4.23 (2025-11-28 / 1e0f92f)
-
-## Added
-
 - Add `lambdaisland.makina.test`
 - Add Kaocha plugin
 - Add a full write-up to the README
+
+## Fixed
+
+- Fix cljs compatiblity for `lambdaisland.makina.system`
+- Fix cljdoc build
 
 ## Changed
 

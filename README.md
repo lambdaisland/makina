@@ -115,6 +115,15 @@ the map before calling `:stop`.
 These additional keys allow you to write more generic handlers that can deal
 with multiple types of components.
 
+## Compatibility
+
+Makina has mostly been used and tested on JVM Clojure. We've verified that all
+namespaces also load in Babashka, and expect no issues using it there, though it
+hasn't been tested extensively. The `lambdaisland.makina.system` namespace is
+pure-cljc, so can be used from ClojureScript, although at the moment we lack a
+higher level equivalent to `lambdaisland.makina.app`, making it a bit
+lackluster.
+
 ## Deep Dive
 
 Let's take a step back here, and explain Makina from the ground up.
