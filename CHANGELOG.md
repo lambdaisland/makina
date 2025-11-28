@@ -1,4 +1,4 @@
-# Unreleased
+# 0.7.32 (2025-11-28 / 0f1e1ac)
 
 ## Added
 

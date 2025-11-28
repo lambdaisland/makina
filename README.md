@@ -35,13 +35,13 @@ Makina plays well with
 To use the latest release, add the following to your `deps.edn` ([Clojure CLI](https://clojure.org/guides/deps_and_cli))
 
 ```clj
-com.lambdaisland/makina {:mvn/version "0.6.29"}
+com.lambdaisland/makina {:mvn/version "0.7.32"}
 ```
 
 or add the following to your `project.clj` ([Leiningen](https://leiningen.org/))
 
 ```clj
-[com.lambdaisland/makina "0.6.29"]
+[com.lambdaisland/makina "0.7.32"]
 ```
 <!-- /installation -->
 
