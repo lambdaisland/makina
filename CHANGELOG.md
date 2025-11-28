@@ -1,3 +1,11 @@
+# Unreleased
+
+## Added
+
+## Fixed
+
+## Changed
+
 # 0.6.29 (2025-11-28 / b8dddb3)
 
 ## Fixed

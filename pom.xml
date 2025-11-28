@@ -3,7 +3,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>com.lambdaisland</groupId>
   <artifactId>makina</artifactId>
-  <version>0.5.28</version>
+  <version>0.6.29</version>
   <name>makina</name>
   <description>System/component lifecycle management</description>
   <url>https://github.com/lambdaisland/makina</url>
@@ -25,7 +25,7 @@
     <url>https://github.com/lambdaisland/makina</url>
     <connection>scm:git:git://github.com/lambdaisland/makina.git</connection>
     <developerConnection>scm:git:ssh://git@github.com/lambdaisland/makina.git</developerConnection>
-    <tag>3b7dbed9d8f171f13f72be45985a19e8704f5927</tag>
+    <tag>f7523772e45b8b7742f60c4c4c742768a502187c</tag>
   </scm>
   <dependencies>
     <dependency>
@@ -37,6 +37,18 @@
       <groupId>lambdaisland</groupId>
       <artifactId>data-printers</artifactId>
       <version>0.9.58</version>
+    </dependency>
+    <dependency>
+      <groupId>lambdaisland</groupId>
+      <artifactId>kaocha</artifactId>
+      <version>1.91.1392</version>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.clojure</groupId>
+      <artifactId>tools.namespace</artifactId>
+      <version>1.5.0</version>
+      <scope>provided</scope>
     </dependency>
   </dependencies>
   <build>
@@ -66,7 +78,7 @@
         <configuration>
           <archive>
             <manifestEntries>
-              <git-revision>3b7dbed9d8f171f13f72be45985a19e8704f5927</git-revision>
+              <git-revision>f7523772e45b8b7742f60c4c4c742768a502187c</git-revision>
             </manifestEntries>
           </archive>
         </configuration>
