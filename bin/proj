@@ -4,10 +4,12 @@
   (:require [lioss.main :as lioss]))
 
 (lioss/main
- {:license          :mpl
-  :inception-year   2025
-  :description      "System/component lifecycle management"
-  :group-id         "com.lambdaisland"})
+ {:license        :mpl
+  :inception-year 2025
+  :description    "System/component lifecycle management"
+  :group-id       "com.lambdaisland"
+  ;; for cljdoc
+  :aliases-as-scope-provided [:provided]})
 
 ;; Local Variables:
 ;; mode:clojure
