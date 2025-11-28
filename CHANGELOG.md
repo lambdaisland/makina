@@ -1,13 +1,5 @@
 # Unreleased
 
-## Added
-
-## Fixed
-
-## Changed
-
-# 0.5.26 (2025-11-28 / d704583)
-
 ## Fixed
 
 - Fix cljdoc build
