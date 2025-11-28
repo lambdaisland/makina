@@ -3,7 +3,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>com.lambdaisland</groupId>
   <artifactId>makina</artifactId>
-  <version>0.6.29</version>
+  <version>0.7.32</version>
   <name>makina</name>
   <description>System/component lifecycle management</description>
   <url>https://github.com/lambdaisland/makina</url>
@@ -25,7 +25,7 @@
     <url>https://github.com/lambdaisland/makina</url>
     <connection>scm:git:git://github.com/lambdaisland/makina.git</connection>
     <developerConnection>scm:git:ssh://git@github.com/lambdaisland/makina.git</developerConnection>
-    <tag>f7523772e45b8b7742f60c4c4c742768a502187c</tag>
+    <tag>fbfb1c4b118ce2682cee7465152f38b97c0c6787</tag>
   </scm>
   <dependencies>
     <dependency>
@@ -78,7 +78,7 @@
         <configuration>
           <archive>
             <manifestEntries>
-              <git-revision>f7523772e45b8b7742f60c4c4c742768a502187c</git-revision>
+              <git-revision>fbfb1c4b118ce2682cee7465152f38b97c0c6787</git-revision>
             </manifestEntries>
           </archive>
         </configuration>
